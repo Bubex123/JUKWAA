@@ -1,0 +1,21 @@
+# Dependencies and build output
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/coverage/
+**/*.tsbuildinfo
+**/src/generated/prisma/
+
+# Local secrets and environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local editor and agent configuration
+**/.agents/
+**/.claude/
+**/.cursor/
+**/.devin/
+**/AGENTS.md
+/.git-backend-original/

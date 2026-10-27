@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ORGANIZER
+  ADMIN
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum TicketStatus {
+  VALID
+  USED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum PayoutRequestStatus {
+  DEMO_REQUESTED
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(ORGANIZER)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  events       Event[]
+  orders       Order[]  @relation("BuyerOrders")
+  checkedIn    Ticket[] @relation("TicketCheckin")
+  payoutRequests PayoutRequest[]
+}
+
+model Event {
+  id          String      @id @default(uuid()) @db.Uuid
+  slug        String      @unique
+  organizerId String      @db.Uuid
+  category    String
+  title       String
+  description String      @db.Text
+  startsAt    DateTime    @db.Timestamptz(3)
+  venue       String
+  image       String?
+  badge       String?
+  status      EventStatus @default(DRAFT)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+
+  organizer   User         @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+  ticketTypes TicketType[]
+  orders      Order[]
+  tickets     Ticket[]
+
+  @@index([status, startsAt])
+  @@index([organizerId, createdAt])
+}
+
+model TicketType {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @db.Uuid
+  name        String
+  description String?
+  price       Int
+  quantity    Int
+  sold        Int      @default(0)
+  reserved    Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  event       Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+
+  @@index([eventId, active])
+}
+
+model Order {
+  id              String      @id @default(uuid()) @db.Uuid
+  eventId         String      @db.Uuid
+  buyerId         String?     @db.Uuid
+  buyerName       String
+  buyerEmail      String?
+  buyerPhone      String
+  currency        String      @default("TZS")
+  totalAmount     Int
+  status          OrderStatus @default(PENDING)
+  paymentProvider String?
+  providerRef     String?     @unique
+  accessTokenHash String
+  expiresAt       DateTime    @db.Timestamptz(3)
+  paidAt          DateTime?   @db.Timestamptz(3)
+  createdAt       DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime    @updatedAt @db.Timestamptz(3)
+
+  event       Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  buyer       User?          @relation("BuyerOrders", fields: [buyerId], references: [id], onDelete: SetNull)
+  items       OrderItem[]
+  payment     PaymentAttempt?
+  tickets     Ticket[]
+
+  @@index([eventId, status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id           String @id @default(uuid()) @db.Uuid
+  orderId      String @db.Uuid
+  ticketTypeId String @db.Uuid
+  quantity     Int
+  unitPrice    Int
+
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, ticketTypeId])
+}
+
+model PaymentAttempt {
+  id                String        @id @default(uuid()) @db.Uuid
+  orderId           String        @unique @db.Uuid
+  provider          String
+  providerReference String?       @unique
+  status            PaymentStatus @default(PENDING)
+  amount            Int
+  rawStatus         String?
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Ticket {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique
+  eventId     String       @db.Uuid
+  orderId     String       @db.Uuid
+  ticketType  String
+  status      TicketStatus @default(VALID)
+  checkedInAt DateTime?    @db.Timestamptz(3)
+  checkedInById String?    @db.Uuid
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  order       Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  checkedInBy User? @relation("TicketCheckin", fields: [checkedInById], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+}
+
+model PaymentWebhook {
+  id          String   @id @default(uuid()) @db.Uuid
+  provider    String
+  eventId     String
+  payloadHash String
+  receivedAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([provider, eventId])
+}
+
+model PayoutRequest {
+  id          String              @id @default(uuid()) @db.Uuid
+  organizerId String              @db.Uuid
+  amount      Int
+  provider    String
+  phone       String
+  status      PayoutRequestStatus @default(DEMO_REQUESTED)
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
+
+  organizer User @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@index([organizerId, createdAt])
+}
